@@ -6,12 +6,32 @@
 //
 
 import SwiftUI
+import IssueReporting
 
 @main
 struct ONTestApp: App {
+    
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            if !isTesting {
+                
+                ZStack {
+                    TabView {
+                        MatchListView(
+                            store: .init(initialState: .init(), reducer: { MatchListFeature() })
+                        )
+                        .tabItem { Label("Matches", systemImage: "sportscourt") }
+                        
+                        SecondTabView()
+                            .tabItem { Label("Second Page", systemImage: "gear") }
+                    }
+                    
+                    VStack {
+                        FPSBadge()
+                        Spacer()
+                    }
+                }
+            }
         }
     }
 }
