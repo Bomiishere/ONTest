@@ -14,13 +14,7 @@ struct MatchListView: View {
     var body: some View {
         NavigationStack {
             List(store.rows) { row in
-                MatchRowView(
-                    teamA: row.teamA,
-                    teamB: row.teamB,
-                    time: row.time,
-                    teamAOdds: row.teamAOdds,
-                    teamBOdds: row.teamBOdds
-                )
+                MatchRowView(row: row)
                 .id(row.id)
                 .listRowSeparator(.hidden)
                 .listRowInsets(.init(top: 12, leading: 16, bottom: 12, trailing: 16))

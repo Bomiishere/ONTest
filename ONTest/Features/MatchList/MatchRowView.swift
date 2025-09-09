@@ -8,35 +8,32 @@
 import SwiftUI
 
 struct MatchRowView: View {
-    let teamA: String
-    let teamB: String
-    let time: String
-    let teamAOdds: String
-    let teamBOdds: String
+    
+    let row: MatchListFeature.State.Row
     
     var body: some View {
         VStack() {
             VStack(spacing: 12) {
                 HStack {
-                    Text(teamA)
+                    Text(row.teamA)
                     Spacer()
                     Text("主隊")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                    Text(teamAOdds)
+                    Text(row.teamAOdds)
                         .bold()
                 }
                 HStack {
-                    Text(teamB)
+                    Text(row.teamB)
                         .foregroundColor(.blue)
                     Spacer()
                     Text("客隊")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                    Text(teamBOdds)
+                    Text(row.teamBOdds)
                         .bold()
                 }
-                Text(time)
+                Text(row.time)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
