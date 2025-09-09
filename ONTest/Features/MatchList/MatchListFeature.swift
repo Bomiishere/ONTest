@@ -11,8 +11,13 @@ import ComposableArchitecture
 @Reducer
 struct MatchListFeature {
     
-    enum CancelID { case stream }
-    enum ThrottleID: Hashable { case match(Int) }
+    enum CancelID {
+        case stream
+    }
+    
+    enum ThrottleID: Hashable {
+        case match(Int)
+    }
     
     @ObservableState
     struct State: Equatable {
@@ -34,24 +39,28 @@ struct MatchListFeature {
     
     enum Action: Equatable {
         case task
-        //TODO: send fetch behavior cache into repo
+        
+        // match list
         case _fetchCache
         case _fetchAPI
         case _apply([State.Row])
-        case _failed(String)
+        
+        //odds stream
         case _startOddsStream
         case _throttleStreamUpdate(OddsUpdate)
         case _updateOdds(OddsUpdate)
+        ///may using in other action
         case _updateOddsRepo(OddsUpdate)
+        
+        case _failed(String)
         case stop
+        
     }
     
     // MARK: Dependencies
-    @Dependency(\.matchService) var matchService
-    @Dependency(\.oddsService) var oddsService
+    @Dependency(\.matchListRepo) var matchListRepo
     @Dependency(\.oddsStream) var oddsStream
     @Dependency(\.oddsRepo) var oddsRepo
-    @Dependency(\.matchRepo) var matchRepo
     @Dependency(\.mainQueue) var mainQueue
     
     // MARK: Reducer
@@ -68,56 +77,16 @@ struct MatchListFeature {
                 }
                 
             case ._fetchCache:
-                return .run { [matchRepo, oddsRepo] send in
-                    let cachedMatches = await matchRepo.snapshot()
-                    guard !cachedMatches.isEmpty else { return }
-
-                    let sorted = cachedMatches.sorted { $0.startTime > $1.startTime }
-                    var rows: [State.Row] = []
-                    rows.reserveCapacity(sorted.count)
-
-                    for match in sorted {
-                        let odd = await oddsRepo.getOdds(match.id)
-                        rows.append(.init(
-                            id: match.id,
-                            teamA: match.teamA,
-                            teamB: match.teamB,
-                            time: match.startTime,
-                            teamAOdds: (odd?.teamAOdds ?? .nan).oddsDisplay,
-                            teamBOdds: (odd?.teamBOdds ?? .nan).oddsDisplay
-                        ))
-                    }
-
-                    await send(._apply(rows))
+                return .run { [matchListRepo] send in
+                    let rows = await matchListRepo.fetchCache()
+                    if rows.count > 0 { await send(._apply(rows)) }
                 }
                 
             case ._fetchAPI:
-                return .run { [matchService, oddsService, matchRepo, oddsRepo] send in
+                return .run { [matchListRepo] send in
                     do {
-                        async let matchesJob = matchService.fetchMatches()
-                        async let oddsListJob = oddsService.fetchOddsList()
-                        let (matches, oddsList) = try await (matchesJob, oddsListJob)
-                        await matchRepo.seed(matches)
-                        await oddsRepo.seed(oddsList)
-                        
-                        //prevent unique key crash
-                        let oddsMap = oddsList.reduce(into: [Int: Odds]()) { dict, odds in
-                            dict[odds.matchID] = odds
-                        }
-                        let sorted = matches.sorted { $0.startTime > $1.startTime }
-                        let rows: [State.Row] = sorted.map { match in
-                            let odds = oddsMap[match.id]
-                            return .init(
-                                id: match.id,
-                                teamA: match.teamA,
-                                teamB: match.teamB,
-                                time: match.startTime,
-                                teamAOdds: (odds?.teamAOdds ?? .nan).oddsDisplay,
-                                teamBOdds: (odds?.teamBOdds ?? .nan).oddsDisplay
-                            )
-                        }
+                        let rows = try await matchListRepo.fetchAPI()
                         await send(._apply(rows))
-                        
                     } catch {
                         await send(._failed(String(describing: error)))
                     }

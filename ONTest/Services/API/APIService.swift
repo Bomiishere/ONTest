@@ -43,7 +43,7 @@ actor APIService {
         }
     }
     
-    deinit { print("APIService deinit") }
+//    deinit { print("APIService deinit") }
 }
 
 extension APIService {

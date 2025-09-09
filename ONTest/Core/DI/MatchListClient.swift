@@ -7,80 +7,57 @@
 
 import ComposableArchitecture
 import Foundation
+import Dependencies
 
-//MARK: MatchServiceClient
-@DependencyClient
-struct MatchServiceClient {
-    var fetchMatches: @Sendable () async throws -> [Match]
+// MARK: MatchListRepoClient
+struct MatchListRepoClient {
+    var fetchCache: @Sendable () async -> MatchListRepository.DataType
+    var fetchAPI:   @Sendable () async throws -> MatchListRepository.DataType
 }
-extension MatchServiceClient: DependencyKey {
-    static var liveValue: MatchServiceClient = .init(
-        fetchMatches: {
-            let service = APIService()
-            return try await service.fetch(APIEndPoint.matches, [Match].self)
+
+extension MatchListRepoClient: DependencyKey {
+    
+    static var liveValue: MatchListRepoClient = .init(
+        fetchCache: {
+            let repo = MatchListRepository()
+            return await repo.snapshot()
+        },
+        fetchAPI: {
+            let repo = MatchListRepository()
+            return try await repo.fetchAPI()
+        }
+    )
+
+    static var previewValue: MatchListRepoClient = .init(
+        fetchCache: {
+            let repo = MatchListRepository()
+            return await repo.snapshot()
+        },
+        fetchAPI: {
+            let repo = MatchListRepository()
+            return try await repo.fetchAPI()
         }
     )
     
-    static let previewValue: MatchServiceClient = .init(
-        fetchMatches: {
-            let service = MockMatchService()
-            return try await service.fetchMatches()
-        }
-    )
-    
-    static let testValue: MatchServiceClient = .init(
-        fetchMatches: {
-            let service = MockMatchService()
-            return try await service.fetchMatches()
-        }
+    static var testValue: MatchListRepoClient = .init(
+        fetchCache: { [] },
+        fetchAPI: { [] }
     )
 }
+
 extension DependencyValues {
-    var matchService: MatchServiceClient {
-        get { self[MatchServiceClient.self] }
-        set { self[MatchServiceClient.self] = newValue }
+    var matchListRepo: MatchListRepoClient {
+        get { self[MatchListRepoClient.self] }
+        set { self[MatchListRepoClient.self] = newValue }
     }
 }
 
-//MARK: OddsServiceClient
-@DependencyClient
-struct OddsServiceClient {
-    var fetchOddsList: @Sendable () async throws -> [Odds]
-}
-extension OddsServiceClient: DependencyKey {
-    static var liveValue: OddsServiceClient = .init(
-        fetchOddsList: {
-            let service = APIService()
-            return try await service.fetch(APIEndPoint.oddsList, [Odds].self)
-        }
-    )
-    
-    static let previewValue: OddsServiceClient = .init(
-        fetchOddsList: {
-            let service = MockOddsService()
-            return try await service.fetchOddsList()
-        }
-    )
-    
-    static let testValue: OddsServiceClient = .init(
-        fetchOddsList: {
-            let service = MockOddsService()
-            return try await service.fetchOddsList()
-        }
-    )
-}
-extension DependencyValues {
-    var oddsService: OddsServiceClient {
-        get { self[OddsServiceClient.self] }
-        set { self[OddsServiceClient.self] = newValue }
-    }
-}
 
 //MARK: OddsStreamClient
-@DependencyClient
 struct OddsStreamClient {
     var updates: @Sendable () async throws -> AsyncStream<OddsUpdate>
 }
+
 extension OddsStreamClient: DependencyKey {
     static var liveValue: OddsStreamClient = .init(
         updates: {
@@ -98,11 +75,13 @@ extension OddsStreamClient: DependencyKey {
     
     static var testValue: OddsStreamClient = .init(
         updates: {
-            let stream = MockOddsStream()
-            return await stream.updates()
+            AsyncStream { continuation in
+                continuation.finish()
+            }
         }
     )
 }
+
 extension DependencyValues {
     var oddsStream: OddsStreamClient {
         get { self[OddsStreamClient.self] }
@@ -110,37 +89,13 @@ extension DependencyValues {
     }
 }
 
-//MARK: MatchRepoClient
-@DependencyClient
-struct MatchRepoClient {
-    var seed: @Sendable ([Match]) async -> Void
-    var snapshot: @Sendable () async -> [Match] = { [] }
-    var getMatch: @Sendable (Int) async -> Match?
-}
-extension MatchRepoClient: DependencyKey {
-    static let liveValue: MatchRepoClient = {
-        let repo = MatchRepository()
-        return .init(
-            seed: { await repo.seed($0) },
-            snapshot: { await repo.snapshot() },
-            getMatch: { await repo.getMatch($0) }
-        )
-    }()
-}
-extension DependencyValues {
-    var matchRepo: MatchRepoClient {
-        get { self[MatchRepoClient.self] }
-        set { self[MatchRepoClient.self] = newValue }
-    }
-}
-
 //MARK: OddsRepoClient
-@DependencyClient
 struct OddsRepoClient {
     var seed: @Sendable ([Odds]) async -> Void
     var apply: @Sendable (OddsUpdate) async -> Void
     var getOdds: @Sendable (Int) async -> Odds?
 }
+
 extension OddsRepoClient: DependencyKey {
     static let liveValue: OddsRepoClient = {
         let repo = OddsRepository()
@@ -150,7 +105,17 @@ extension OddsRepoClient: DependencyKey {
             getOdds: { await repo.getOdds($0) }
         )
     }()
+    
+    static let testValue: OddsRepoClient = {
+        let repo = OddsRepository()
+        return .init(
+            seed: { await repo.seed($0) },
+            apply: { await repo.apply($0) },
+            getOdds: { await repo.getOdds($0) }
+        )
+    }()
 }
+
 extension DependencyValues {
     var oddsRepo: OddsRepoClient {
         get { self[OddsRepoClient.self] }

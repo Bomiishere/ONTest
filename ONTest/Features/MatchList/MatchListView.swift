@@ -42,8 +42,7 @@ struct MatchListView: View {
 
 #Preview("DEV") {
     withDependencies {
-        $0.matchService = .liveValue
-        $0.oddsService = .liveValue
+        $0.matchListRepo = .liveValue
         $0.oddsStream = .liveValue
     } operation: {
         MatchListView(
@@ -56,8 +55,7 @@ struct MatchListView: View {
 
 #Preview("Mock") {
     withDependencies {
-        $0.matchService = .previewValue
-        $0.oddsService = .previewValue
+        $0.matchListRepo = .previewValue
         $0.oddsStream = .previewValue
     } operation: {
         MatchListView(
