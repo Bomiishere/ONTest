@@ -52,43 +52,6 @@ extension DependencyValues {
     }
 }
 
-
-//MARK: OddsStreamClient
-struct OddsStreamClient {
-    var updates: @Sendable () async throws -> AsyncStream<OddsUpdate>
-}
-
-extension OddsStreamClient: DependencyKey {
-    static var liveValue: OddsStreamClient = .init(
-        updates: {
-            let stream = WSStream<WSTopic.Odds>()
-            return await stream.updates()
-        }
-    )
-    
-    static var previewValue: OddsStreamClient = .init(
-        updates: {
-             let oddsStream = MockOddsStream()
-             return await oddsStream.updates()
-        }
-    )
-    
-    static var testValue: OddsStreamClient = .init(
-        updates: {
-            AsyncStream { continuation in
-                continuation.finish()
-            }
-        }
-    )
-}
-
-extension DependencyValues {
-    var oddsStream: OddsStreamClient {
-        get { self[OddsStreamClient.self] }
-        set { self[OddsStreamClient.self] = newValue }
-    }
-}
-
 //MARK: OddsRepoClient
 struct OddsRepoClient {
     var seed: @Sendable ([Odds]) async -> Void

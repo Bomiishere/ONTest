@@ -7,6 +7,7 @@
 
 import Foundation
 import ComposableArchitecture
+import Dependencies
 
 @Reducer
 struct MatchListFeature {
@@ -58,8 +59,9 @@ struct MatchListFeature {
     }
     
     // MARK: Dependencies
-    @Dependency(\.matchListRepo) var matchListRepo
-    @Dependency(\.oddsStream) var oddsStream
+    @Dependency(\.matchListRepo.fetchCache) var fetchCache
+    @Dependency(\.matchListRepo.fetchAPI) var fetchAPI
+    @Dependency(\.ws.oddsUpdate) var oddsUpdate
     @Dependency(\.oddsRepo) var oddsRepo
     @Dependency(\.mainQueue) var mainQueue
     
@@ -77,15 +79,15 @@ struct MatchListFeature {
                 }
                 
             case ._fetchCache:
-                return .run { [matchListRepo] send in
-                    let rows = await matchListRepo.fetchCache()
+                return .run { [fetchCache] send in
+                    let rows = await fetchCache()
                     if rows.count > 0 { await send(._apply(rows)) }
                 }
                 
             case ._fetchAPI:
-                return .run { [matchListRepo] send in
+                return .run { [fetchAPI] send in
                     do {
-                        let rows = try await matchListRepo.fetchAPI()
+                        let rows = try await fetchAPI()
                         await send(._apply(rows))
                     } catch {
                         await send(._failed(String(describing: error)))
@@ -98,9 +100,9 @@ struct MatchListFeature {
                 return .none
                 
             case ._startOddsStream:
-                return .run { [stream = oddsStream] send in
+                return .run { [oddsUpdate] send in
                     do {
-                        let updates = try await stream.updates()
+                        let updates = try await oddsUpdate()
                         for await update in updates {
                             await send(._throttleStreamUpdate(update))
                         }

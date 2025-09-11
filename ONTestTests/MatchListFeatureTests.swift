@@ -27,8 +27,6 @@ final class MatchListFeatureTests: XCTestCase {
             state.isLoading = true
             state.errorMessage = nil
         }
-        
-        //receive
         await store.receive { action in
             if case ._fetchCache = action { return true }
             return false
@@ -49,6 +47,7 @@ final class MatchListFeatureTests: XCTestCase {
             state.isLoading = false
         }
         
+        await store.send(.stop)
         await store.finish()
     }
     
@@ -135,7 +134,7 @@ final class MatchListFeatureTests: XCTestCase {
             initialState: MatchListFeature.State.init(),
             reducer: { MatchListFeature()}
         )  { deps in
-            deps.oddsStream.updates = { stream }
+            deps.ws.oddsUpdate = { stream }
         }
         await store.send(._startOddsStream)
         await store.send(.stop)
@@ -153,7 +152,7 @@ final class MatchListFeatureTests: XCTestCase {
             reducer: { MatchListFeature()}
         )  { deps in
             deps.mainQueue = scheduler.eraseToAnyScheduler()
-            deps.oddsStream.updates = {
+            deps.ws.oddsUpdate = {
                 AsyncStream { continuation in
                     continuation.yield(.init(matchID: 1, teamAOdds: 1.80, teamBOdds: 2.10))
                     continuation.yield(.init(matchID: 1, teamAOdds: 1.85, teamBOdds: 2.05))
@@ -218,7 +217,7 @@ final class MatchListFeatureTests: XCTestCase {
             reducer: { MatchListFeature()}
         )  { deps in
             deps.mainQueue = scheduler.eraseToAnyScheduler()
-            deps.oddsStream.updates = { throw TestErr.sth }
+            deps.ws.oddsUpdate = { throw TestErr.sth }
         }
         
         await store.send(._startOddsStream)

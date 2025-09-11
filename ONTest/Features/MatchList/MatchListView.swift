@@ -37,7 +37,7 @@ struct MatchListView: View {
 #Preview("DEV") {
     withDependencies {
         $0.matchListRepo = .liveValue
-        $0.oddsStream = .liveValue
+        $0.ws = .liveValue
     } operation: {
         MatchListView(
             store: Store(initialState: MatchListFeature.State()) {
@@ -50,7 +50,7 @@ struct MatchListView: View {
 #Preview("Mock") {
     withDependencies {
         $0.matchListRepo = .previewValue
-        $0.oddsStream = .previewValue
+        $0.ws = .previewValue
     } operation: {
         MatchListView(
             store: Store(initialState: MatchListFeature.State()) {
