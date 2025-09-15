@@ -22,15 +22,25 @@ struct MatchListView: View {
             .listStyle(.plain)
             .overlay {
                 if store.isLoading {
-                    ProgressView("Loading…")
+                    loadingView
                 } else if let err = store.errorMessage {
-                    ContentUnavailableView("Error", systemImage: "exclamationmark.triangle", description: Text(err))
+                    errorView(Text(err))
                 }
             }
             .navigationTitle("Matches & Odds")
             .task { await store.send(.task).finish() }
             .onDisappear { store.send(.stop) }
         }
+    }
+    
+    @MainActor
+    private var loadingView: some View {
+        ProgressView("Loading…")
+    }
+    
+    @MainActor
+    private func errorView(_ text: Text) -> some View {
+        ContentUnavailableView("Error", systemImage: "exclamationmark.triangle", description: text)
     }
 }
 
