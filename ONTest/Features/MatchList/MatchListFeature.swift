@@ -23,7 +23,7 @@ struct MatchListFeature {
     @ObservableState
     struct State: Equatable {
         var id: UUID = .init()
-        var rows: [Row] = []
+        var rows: IdentifiedArrayOf<Row> = []
         var isLoading = false
         var errorMessage: String?
         
@@ -94,7 +94,7 @@ struct MatchListFeature {
                 }
                 
             case let ._apply(rows):
-                state.rows = rows
+                state.rows = .init(uniqueElements: rows)
                 state.isLoading = false
                 return .none
                 
@@ -125,9 +125,10 @@ struct MatchListFeature {
                 )
                 
             case let ._updateOdds(update):
-                if let idx = state.rows.firstIndex(where: { $0.id == update.matchID }) {
-                    state.rows[idx].teamAOdds = update.teamAOdds.oddsDisplay
-                    state.rows[idx].teamBOdds = update.teamBOdds.oddsDisplay
+                if var row = state.rows[id: update.matchID] {
+                    row.teamAOdds = update.teamAOdds.oddsDisplay
+                    row.teamBOdds = update.teamBOdds.oddsDisplay
+                    state.rows[id: update.matchID] = row
                 }
                 return .none
                 

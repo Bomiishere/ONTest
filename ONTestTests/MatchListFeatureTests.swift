@@ -69,7 +69,7 @@ final class MatchListFeatureTests: XCTestCase {
             if case ._apply = action { return true }
             return false
         }) { state in
-            state.rows = exp_rows
+            state.rows = .init(uniqueElements: exp_rows)
             state.isLoading = false
         }
         await store.finish()
@@ -93,7 +93,7 @@ final class MatchListFeatureTests: XCTestCase {
             if case ._apply = action { return true }
             return false
         }) { status in
-            status.rows = exp_rows
+            status.rows = .init(uniqueElements: exp_rows)
             status.isLoading = false
         }
         await store.finish()
