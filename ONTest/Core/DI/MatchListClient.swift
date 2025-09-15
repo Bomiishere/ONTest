@@ -11,37 +11,66 @@ import Dependencies
 
 // MARK: MatchListRepoClient
 struct MatchListRepoClient {
-    var fetchCache: @Sendable () async -> MatchListRepository.DataType
-    var fetchAPI:   @Sendable () async throws -> MatchListRepository.DataType
+    var fetchUpdates: @Sendable () async -> AsyncThrowingStream<MatchListRepository.DataType, Error>
 }
 
 extension MatchListRepoClient: DependencyKey {
-    
+
     static var liveValue: MatchListRepoClient = .init(
-        fetchCache: {
+        fetchUpdates: {
             let repo = MatchListRepository()
-            return await repo.snapshot()
-        },
-        fetchAPI: {
-            let repo = MatchListRepository()
-            return try await repo.fetchAPI()
+            return AsyncThrowingStream<MatchListRepository.DataType, Error> { continuation in
+                let task = Task {
+                    let cacheRows = await repo.snapshot()
+                    if !cacheRows.isEmpty {
+                        continuation.yield(cacheRows)
+                    }
+
+                    do {
+                        let apiRows = try await repo.fetchAPI()
+                        continuation.yield(apiRows)
+                        continuation.finish()
+                    } catch is CancellationError {
+                        continuation.finish()
+                    } catch {
+                        continuation.finish(throwing: error)
+                    }
+                }
+                continuation.onTermination = { _ in task.cancel() }
+            }
         }
     )
 
     static var previewValue: MatchListRepoClient = .init(
-        fetchCache: {
+        fetchUpdates: {
             let repo = MatchListRepository()
-            return await repo.snapshot()
-        },
-        fetchAPI: {
-            let repo = MatchListRepository()
-            return try await repo.fetchAPI()
+            return AsyncThrowingStream<MatchListRepository.DataType, Error> { continuation in
+                let task = Task {
+                    let cacheRows = await repo.snapshot()
+                    if !cacheRows.isEmpty {
+                        continuation.yield(cacheRows)
+                    }
+                    do {
+                        let apiRows = try await repo.fetchAPI()
+                        continuation.yield(apiRows)
+                        continuation.finish()
+                    } catch is CancellationError {
+                        continuation.finish()
+                    } catch {
+                        continuation.finish(throwing: error)
+                    }
+                }
+                continuation.onTermination = { _ in task.cancel() }
+            }
         }
     )
-    
+
     static var testValue: MatchListRepoClient = .init(
-        fetchCache: { [] },
-        fetchAPI: { [] }
+        fetchUpdates: {
+            AsyncThrowingStream<MatchListRepository.DataType, Error> { continuation in
+                continuation.finish()
+            }
+        }
     )
 }
 

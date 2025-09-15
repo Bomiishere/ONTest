@@ -28,7 +28,7 @@ struct MatchListView: View {
             }
             .navigationTitle("Matches & Odds")
             .task { await store.send(.task).finish() }
-            .onDisappear { store.send(.stop) }
+            .onDisappear { store.send(.onDisappear) }
         }
     }
     

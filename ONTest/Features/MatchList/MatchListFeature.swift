@@ -13,7 +13,7 @@ import Dependencies
 struct MatchListFeature {
     
     enum CancelID {
-        case stream
+        case oddsUpdates, matchListUpdates
     }
     
     enum ThrottleID: Hashable {
@@ -41,8 +41,7 @@ struct MatchListFeature {
         case task
         
         // match list
-        case _fetchCache
-        case _fetchAPI
+        case _fetchMatchList
         case _apply(_ newRows: IdentifiedArrayOf<State.Row>)
         case _applyDonePatch(_ patch: MatchListPatch, _ newRows: IdentifiedArrayOf<State.Row>)
         
@@ -54,46 +53,44 @@ struct MatchListFeature {
         case _updateOddsRepo(OddsUpdate)
         
         case _failed(String)
-        case stop
+        case onDisappear
         
     }
     
     // MARK: Dependencies
-    @Dependency(\.matchListRepo.fetchCache) var fetchCache
-    @Dependency(\.matchListRepo.fetchAPI) var fetchAPI
-    @Dependency(\.ws.oddsUpdate) var oddsUpdate
+    @Dependency(\.matchListRepo.fetchUpdates) var matchListFetchUpdates
+    @Dependency(\.matchListDiffer.patch) var differPatch
+    @Dependency(\.ws.oddsUpdate) var wsOddsUpdate
     @Dependency(\.oddsRepo) var oddsRepo
     @Dependency(\.mainQueue) var mainQueue
-    @Dependency(\.matchListDiffer.patch) var differPatch
     
     // MARK: Reducer
     var body: some ReducerOf<Self> {
-        Reduce { state, action in
+        Reduce {
+            state,
+            action in
             switch action {
             case .task:
                 state.isLoading = true
                 state.errorMessage = nil
                 return .run { send in
-                    await send(._fetchCache)
-                    await send(._fetchAPI)
+                    await send(._fetchMatchList)
                     await send(._startOddsStream)
                 }
                 
-            case ._fetchCache:
-                return .run { [fetchCache] send in
-                    let rows = await fetchCache()
-                    if rows.count > 0 { await send(._apply(IdentifiedArray(uniqueElements: rows))) }
-                }
-                
-            case ._fetchAPI:
-                return .run { [fetchAPI] send in
+            case ._fetchMatchList:
+                return .run { [matchListFetchUpdates] send in
                     do {
-                        let rows = try await fetchAPI()
-                        await send(._apply(IdentifiedArray(uniqueElements: rows)))
+                        let stream = await matchListFetchUpdates()
+                        for try await rows in stream {
+                            let identifiedRows = IdentifiedArray(uniqueElements: rows)
+                            await send(._apply(identifiedRows))
+                        }
                     } catch {
                         await send(._failed(String(describing: error)))
                     }
                 }
+                .cancellable(id: CancelID.matchListUpdates, cancelInFlight: true)
                 
             case let ._apply(newRows):
                 let existing = state.rows
@@ -101,6 +98,7 @@ struct MatchListFeature {
                     let patch = await differPatch(Array(existing), Array(newRows))
                     await send(._applyDonePatch(patch, newRows))
                 }
+                .cancellable(id: CancelID.matchListUpdates, cancelInFlight: true)
                 
             case let ._applyDonePatch(patch, newRows):
                 let done = state.applyPatch(patch, toward: newRows)
@@ -108,9 +106,9 @@ struct MatchListFeature {
                 return done ? .none : .send(._apply(newRows))
                 
             case ._startOddsStream:
-                return .run { [oddsUpdate] send in
+                return .run { [wsOddsUpdate] send in
                     do {
-                        let updates = try await oddsUpdate()
+                        let updates = try await wsOddsUpdate()
                         for await update in updates {
                             await send(._throttleStreamUpdate(update))
                         }
@@ -118,7 +116,7 @@ struct MatchListFeature {
                         await send(._failed(String(describing: error)))
                     }
                 }
-                .cancellable(id: CancelID.stream, cancelInFlight: true)
+                .cancellable(id: CancelID.oddsUpdates, cancelInFlight: true)
                 
             case let ._throttleStreamUpdate(update):
                 //merge throttles
@@ -151,8 +149,11 @@ struct MatchListFeature {
                 state.errorMessage = message
                 return .none
                 
-            case .stop:
-                return .cancel(id: CancelID.stream)
+            case .onDisappear:
+                return .merge(
+                    .cancel(id: CancelID.matchListUpdates),
+                    .cancel(id: CancelID.oddsUpdates)
+                )
             }
         }
     }
@@ -203,14 +204,12 @@ extension MatchListFeature.State {
     mutating func applyContentUpdates(toward target: IdentifiedArrayOf<Row>, opsLeft: Int) -> Int {
         guard opsLeft > 0 else { return 0 }
         var budget = opsLeft
-        let limit = min(rows.count, target.count)
-        var i = 0
-        while i < limit && budget > 0 {
-            if rows[i].id == target[i].id, rows[i] != target[i] {
-                rows[i] = target[i]
+        for t in target {
+            if let i = rows.index(id: t.id), rows[i] != t {
+                rows[i] = t
                 budget -= 1
+                if budget == 0 { break }
             }
-            i += 1
         }
         return budget
     }
