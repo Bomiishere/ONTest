@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct Odds: Hashable, Codable {
+struct Odds: Codable {
     let matchID: Int
     let teamAOdds: Double
     let teamBOdds: Double

@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct Match: Identifiable, Hashable, Codable {
+struct Match: Codable {
     let id: Int
     let teamA: String
     let teamB: String
