@@ -43,7 +43,8 @@ struct MatchListFeature {
         // match list
         case _fetchCache
         case _fetchAPI
-        case _apply([State.Row])
+        case _apply(_ newRows: IdentifiedArrayOf<State.Row>)
+        case _applyDonePatch(_ patch: MatchListPatch, _ newRows: IdentifiedArrayOf<State.Row>)
         
         //odds stream
         case _startOddsStream
@@ -63,6 +64,7 @@ struct MatchListFeature {
     @Dependency(\.ws.oddsUpdate) var oddsUpdate
     @Dependency(\.oddsRepo) var oddsRepo
     @Dependency(\.mainQueue) var mainQueue
+    @Dependency(\.matchListDiffer.patch) var differPatch
     
     // MARK: Reducer
     var body: some ReducerOf<Self> {
@@ -80,23 +82,30 @@ struct MatchListFeature {
             case ._fetchCache:
                 return .run { [fetchCache] send in
                     let rows = await fetchCache()
-                    if rows.count > 0 { await send(._apply(rows)) }
+                    if rows.count > 0 { await send(._apply(IdentifiedArray(uniqueElements: rows))) }
                 }
                 
             case ._fetchAPI:
                 return .run { [fetchAPI] send in
                     do {
                         let rows = try await fetchAPI()
-                        await send(._apply(rows))
+                        await send(._apply(IdentifiedArray(uniqueElements: rows)))
                     } catch {
                         await send(._failed(String(describing: error)))
                     }
                 }
                 
-            case let ._apply(rows):
-                state.rows = .init(uniqueElements: rows)
+            case let ._apply(newRows):
+                let existing = state.rows
+                return .run(priority: .utility) { [differPatch, existing] send in
+                    let patch = await differPatch(Array(existing), Array(newRows))
+                    await send(._applyDonePatch(patch, newRows))
+                }
+                
+            case let ._applyDonePatch(patch, newRows):
+                let done = state.applyPatch(patch, toward: newRows)
                 state.isLoading = false
-                return .none
+                return done ? .none : .send(._apply(newRows))
                 
             case ._startOddsStream:
                 return .run { [oddsUpdate] send in
@@ -146,5 +155,63 @@ struct MatchListFeature {
                 return .cancel(id: CancelID.stream)
             }
         }
+    }
+}
+
+extension MatchListFeature.State {
+    
+    mutating func applyPatch(
+        _ patch: MatchListPatch,
+        toward target: IdentifiedArrayOf<Row>,
+        maximumOperations: Int = 20
+    ) -> Bool {
+        var operationsLeft = maximumOperations
+        operationsLeft = applyDeletions(patch.removals, opsLeft: operationsLeft)
+        operationsLeft = applyInsertions(patch.insertions, opsLeft: operationsLeft)
+        _ = applyContentUpdates(toward: target, opsLeft: operationsLeft)
+        return rows == target
+    }
+    
+    mutating func applyDeletions(_ removals: [Int], opsLeft: Int) -> Int {
+        guard opsLeft > 0, !removals.isEmpty else { return opsLeft }
+        var budget = opsLeft
+        for idx in removals.sorted(by: >).prefix(budget) {
+            if idx >= 0 && idx < rows.count {
+                rows.remove(at: idx)
+                budget -= 1
+                if budget == 0 { break }
+            }
+        }
+        return budget
+    }
+    
+    mutating func applyInsertions(_ insertions: [(Int, Row)], opsLeft: Int) -> Int {
+        guard opsLeft > 0, !insertions.isEmpty else { return opsLeft }
+        var budget = opsLeft
+        for (index, row) in insertions.sorted(by: { $0.0 < $1.0 }).prefix(budget) {
+            if index <= rows.count {
+                rows.insert(row, at: index)
+            } else {
+                rows.append(row)
+            }
+            budget -= 1
+            if budget == 0 { break }
+        }
+        return budget
+    }
+    
+    mutating func applyContentUpdates(toward target: IdentifiedArrayOf<Row>, opsLeft: Int) -> Int {
+        guard opsLeft > 0 else { return 0 }
+        var budget = opsLeft
+        let limit = min(rows.count, target.count)
+        var i = 0
+        while i < limit && budget > 0 {
+            if rows[i].id == target[i].id, rows[i] != target[i] {
+                rows[i] = target[i]
+                budget -= 1
+            }
+            i += 1
+        }
+        return budget
     }
 }
