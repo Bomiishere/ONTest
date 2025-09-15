@@ -27,7 +27,6 @@ struct MatchListFeature {
         var isLoading = false
         var errorMessage: String?
         
-        @ObservableState
         struct Row: Equatable, Identifiable {
             let id: Int
             let teamA: String
@@ -127,16 +126,8 @@ struct MatchListFeature {
                 
             case let ._updateOdds(update):
                 if let idx = state.rows.firstIndex(where: { $0.id == update.matchID }) {
-                    let row = state.rows[idx]
-                    let newRow: State.Row = .init(
-                        id: row.id,
-                        teamA: row.teamA,
-                        teamB: row.teamB,
-                        time: row.time,
-                        teamAOdds: update.teamAOdds.oddsDisplay,
-                        teamBOdds: update.teamBOdds.oddsDisplay
-                    )
-                    state.rows[idx] = newRow
+                    state.rows[idx].teamAOdds = update.teamAOdds.oddsDisplay
+                    state.rows[idx].teamBOdds = update.teamBOdds.oddsDisplay
                 }
                 return .none
                 

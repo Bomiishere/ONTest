@@ -15,7 +15,6 @@ struct MatchListView: View {
         NavigationStack {
             List(store.rows) { row in
                 MatchRowView(row: row)
-                .id(row.id)
                 .listRowSeparator(.hidden)
                 .listRowInsets(.init(top: 12, leading: 16, bottom: 12, trailing: 16))
             }
