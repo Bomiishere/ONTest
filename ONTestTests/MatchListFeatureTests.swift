@@ -74,9 +74,7 @@ final class MatchListFeatureTests: XCTestCase {
     }
     
     func testFetchMatchList_rows_empty() async {
-        let exp_rows: [MatchListFeature.State.Row] = [
-        ]
-        
+        let exp_rows: [MatchListFeature.State.Row] = []
         let store = TestStore(
             initialState: MatchListFeature.State.init(isLoading: true),
             reducer: { MatchListFeature() }
@@ -129,6 +127,64 @@ final class MatchListFeatureTests: XCTestCase {
             state.errorMessage = String(describing: TestErr.sth)
         }
         await store.finish()
+    }
+    
+    func testApplyDeletions_result_budget_bounds() throws {
+        var state = MatchListFeature.State()
+        state.rows = .init(uniqueElements: (0..<8).map { id in
+            MatchListFeature.State.Row(id: id, teamA: "A\(id)", teamB: "B\(id)", time: "2025-01-01T00:00:00Z", teamAOdds: "1.90", teamBOdds: "2.10")
+        })
+        let remaining = state.applyDeletions([2, 10, 4], opsLeft: 2)
+        
+        XCTAssertEqual(state.rows.map(\.id), [0, 1, 3, 5, 6, 7])
+        XCTAssertEqual(remaining, 0, "Budget should be fully consumed")
+    }
+    
+    func testApplyInsertions_result_budget_bounds() throws {
+        var state = MatchListFeature.State()
+        state.rows = .init(uniqueElements: (0..<3).map { id in
+            MatchListFeature.State.Row(id: id, teamA: "A\(id)", teamB: "B\(id)", time: "2025-01-01T00:00:00Z", teamAOdds: "1.90", teamBOdds: "2.10")
+        })
+        /**
+         Conditions:
+         1. Insert at first
+         2. Middle
+         3. Out of range -> append
+         4. Same ID
+         */
+        let insertions: [(Int, MatchListFeature.State.Row)] = [
+            (0, MatchListFeature.State.Row(id: 997, teamA: "", teamB: "", time: "", teamAOdds: "", teamBOdds: "")),
+            (2, MatchListFeature.State.Row(id: 998, teamA: "", teamB: "", time: "", teamAOdds: "", teamBOdds: "")),
+            (999, MatchListFeature.State.Row(id: 999, teamA: "", teamB: "", time: "", teamAOdds: "", teamBOdds: "")),
+            //test same id 998
+            (999, MatchListFeature.State.Row(id: 998, teamA: "", teamB: "", time: "", teamAOdds: "", teamBOdds: "")),
+        ]
+        
+        let remaining = state.applyInsertions(insertions, opsLeft: 4)
+        
+        XCTAssertEqual(state.rows.map(\.id), [997, 0, 998, 1, 2, 999], "Rows id should be fullfill")
+        XCTAssertEqual(remaining, 0, "Budget should be fully consumed")
+    }
+    
+    func testApplyContentUpdates_result_buget_bounds() throws {
+        var state = MatchListFeature.State()
+        state.rows = .init(uniqueElements: (0..<3).map { id in
+            MatchListFeature.State.Row(id: id, teamA: "A\(id)", teamB: "B\(id)", time: "2025-01-01T00:00:00Z", teamAOdds: "1.90", teamBOdds: "2.10")
+        })
+        
+        let updates: IdentifiedArrayOf<MatchListFeature.State.Row> = .init(uniqueElements: [
+            MatchListFeature.State.Row(id: 2, teamA: "", teamB: "", time: "", teamAOdds: "2", teamBOdds: ""),
+            MatchListFeature.State.Row(id: 3, teamA: "", teamB: "", time: "", teamAOdds: "3", teamBOdds: ""),
+            MatchListFeature.State.Row(id: 4, teamA: "", teamB: "", time: "", teamAOdds: "4", teamBOdds: ""),
+        ])
+        
+        let remaining = state.applyContentUpdates(toward: updates, opsLeft: 2)
+        
+        // Only id 2 will update
+        XCTAssertEqual(state.rows[id: 2]?.teamAOdds, "2")
+        XCTAssertEqual(state.rows[id: 3], nil)
+        XCTAssertNil(state.rows[id: 3], "Row with id 3 should not exist")
+        XCTAssertEqual(remaining, 1)
     }
 
     func testOddsStream_start_takeLatestOddsUpdateInOneSecond() async {
@@ -184,7 +240,7 @@ final class MatchListFeatureTests: XCTestCase {
         }
         // verify last OddsUpdate in one sec
         await store.receive({ action in
-            if case let ._updateOdds(update) = action, let last_update = exp_updates.last {
+            if case ._updateOdds = action, let last_update = exp_updates.last {
                 XCTAssertEqual(last_update.matchID, 1)
                 XCTAssertEqual(last_update.teamAOdds, 1.90, accuracy: 0.0001)
                 XCTAssertEqual(last_update.teamBOdds, 2.00, accuracy: 0.0001)

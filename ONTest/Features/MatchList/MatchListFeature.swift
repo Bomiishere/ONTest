@@ -166,7 +166,9 @@ extension MatchListFeature.State {
     mutating func applyDeletions(_ removals: [Int], opsLeft: Int) -> Int {
         guard opsLeft > 0, !removals.isEmpty else { return opsLeft }
         var budget = opsLeft
-        for idx in removals.sorted(by: >).prefix(budget) {
+        
+        //remove from larger id
+        for idx in removals.sorted(by: >) {
             if idx >= 0 && idx < rows.count {
                 rows.remove(at: idx)
                 budget -= 1
@@ -179,7 +181,9 @@ extension MatchListFeature.State {
     mutating func applyInsertions(_ insertions: [(Int, Row)], opsLeft: Int) -> Int {
         guard opsLeft > 0, !insertions.isEmpty else { return opsLeft }
         var budget = opsLeft
-        for (index, row) in insertions.sorted(by: { $0.0 < $1.0 }).prefix(budget) {
+        
+        //insert from smaller id
+        for (index, row) in insertions.sorted(by: { $0.0 < $1.0 }) {
             if index <= rows.count {
                 rows.insert(row, at: index)
             } else {
