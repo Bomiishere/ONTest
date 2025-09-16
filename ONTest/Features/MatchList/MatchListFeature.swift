@@ -47,12 +47,12 @@ struct MatchListFeature {
         
         //odds stream
         case _startOddsStream
-        case _throttleStreamUpdate(OddsUpdate)
+        case _throttleOddsUpdate(OddsUpdate)
         case _updateOdds(OddsUpdate)
-        ///may using in other action
-        case _updateOddsRepo(OddsUpdate)
         
+        //fail
         case _failed(String)
+        
         case onDisappear
         
     }
@@ -61,7 +61,6 @@ struct MatchListFeature {
     @Dependency(\.matchListRepo.fetchUpdates) var matchListFetchUpdates
     @Dependency(\.matchListDiffer.patch) var differPatch
     @Dependency(\.ws.oddsUpdate) var wsOddsUpdate
-    @Dependency(\.oddsRepo) var oddsRepo
     @Dependency(\.mainQueue) var mainQueue
     
     // MARK: Reducer
@@ -110,7 +109,7 @@ struct MatchListFeature {
                     do {
                         let updates = try await wsOddsUpdate()
                         for await update in updates {
-                            await send(._throttleStreamUpdate(update))
+                            await send(._throttleOddsUpdate(update))
                         }
                     } catch {
                         await send(._failed(String(describing: error)))
@@ -118,18 +117,14 @@ struct MatchListFeature {
                 }
                 .cancellable(id: CancelID.oddsUpdates, cancelInFlight: true)
                 
-            case let ._throttleStreamUpdate(update):
-                //merge throttles
-                return .merge(
-                    .send(._updateOdds(update)),
-                    .send(._updateOddsRepo(update))
-                )
-                .throttle(
-                    id: ThrottleID.match(update.matchID),
-                    for: .seconds(1),
-                    scheduler: mainQueue,
-                    latest: true
-                )
+            case let ._throttleOddsUpdate(update):
+                return .send(._updateOdds(update))
+                        .throttle(
+                            id: ThrottleID.match(update.matchID),
+                            for: .seconds(1),
+                            scheduler: mainQueue,
+                            latest: true
+                        )
                 
             case let ._updateOdds(update):
                 if var row = state.rows[id: update.matchID] {
@@ -138,11 +133,6 @@ struct MatchListFeature {
                     state.rows[id: update.matchID] = row
                 }
                 return .none
-                
-            case let ._updateOddsRepo(update):
-                return .run { [oddsRepo] _ in
-                    await oddsRepo.apply(update)
-                }
                 
             case let ._failed(message):
                 state.isLoading = false
