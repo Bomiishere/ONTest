@@ -13,7 +13,7 @@ struct WSClient {
 }
 
 extension WSClient: DependencyKey {
-    static var liveValue: WSClient = {
+    static let liveValue: WSClient = {
         let ws = WSStream()
         return .init(
             launch: { await ws.launch() },
@@ -21,7 +21,7 @@ extension WSClient: DependencyKey {
         )
     }()
     
-    static var previewValue: WSClient = {
+    static let previewValue: WSClient = {
         let ws = WSStream()
         return .init(
             launch: { await ws.launch() },
@@ -29,7 +29,7 @@ extension WSClient: DependencyKey {
         )
     }()
     
-    static var testValue: WSClient = .init(
+    static let testValue: WSClient = .init(
         launch: {},
         oddsUpdate:   { AsyncStream { _ in } }
     )

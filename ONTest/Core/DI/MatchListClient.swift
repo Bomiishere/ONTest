@@ -16,7 +16,7 @@ struct MatchListRepoClient {
 
 extension MatchListRepoClient: DependencyKey {
 
-    static var liveValue: MatchListRepoClient = .init(
+    static let liveValue: MatchListRepoClient = .init(
         fetchUpdates: {
             let repo = MatchListRepository()
             return AsyncThrowingStream<MatchListRepository.DataType, Error> { continuation in
@@ -41,9 +41,9 @@ extension MatchListRepoClient: DependencyKey {
         }
     )
 
-    static var previewValue: MatchListRepoClient = .liveValue
+    static let previewValue: MatchListRepoClient = .liveValue
 
-    static var testValue: MatchListRepoClient = .init(
+    static let testValue: MatchListRepoClient = .init(
         fetchUpdates: {
             AsyncThrowingStream<MatchListRepository.DataType, Error> { continuation in
                 continuation.finish()

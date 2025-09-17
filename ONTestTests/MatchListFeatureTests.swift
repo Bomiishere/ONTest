@@ -189,7 +189,7 @@ final class MatchListFeatureTests: XCTestCase {
 
     func testOddsStream_start_takeLatestOddsUpdateInOneSecond() async {
         
-        let scheduler = DispatchQueue.test
+        let clock = TestClock()
         let exp_updates: [OddsUpdate] = [
             .init(matchID: 1, teamAOdds: 1.80, teamBOdds: 2.10),
             .init(matchID: 1, teamAOdds: 1.85, teamBOdds: 2.05),
@@ -200,7 +200,7 @@ final class MatchListFeatureTests: XCTestCase {
             initialState: MatchListFeature.State.init(),
             reducer: { MatchListFeature()}
         )  { deps in
-            deps.mainQueue = scheduler.eraseToAnyScheduler()
+            deps.continuousClock = clock
             deps.ws.oddsUpdate = {
                 AsyncStream { continuation in
                     for update in exp_updates {
@@ -229,7 +229,7 @@ final class MatchListFeatureTests: XCTestCase {
         await store.send(._startOddsStream)
 
         // 推進 1 秒，只會看到一次 _updateOdds/_updateOddsRepo，且值為最後一筆
-        await scheduler.advance(by: .seconds(1))
+        await clock.advance(by: .seconds(1))
         
         // update 3 筆
         for _ in 0..<3 {

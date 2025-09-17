@@ -61,7 +61,7 @@ struct MatchListFeature {
     @Dependency(\.matchListRepo.fetchUpdates) var matchListFetchUpdates
     @Dependency(\.matchListDiffer.patch) var differPatch
     @Dependency(\.ws.oddsUpdate) var wsOddsUpdate
-    @Dependency(\.mainQueue) var mainQueue
+    @Dependency(\.continuousClock) var clock
     
     // MARK: Reducer
     var body: some ReducerOf<Self> {
@@ -93,7 +93,7 @@ struct MatchListFeature {
                 
             case let ._apply(newRows):
                 let existing = state.rows
-                return .run(priority: .utility) { [differPatch, existing] send in
+                return .run { [differPatch, existing] send in
                     let patch = await differPatch(Array(existing), Array(newRows))
                     await send(._applyDonePatch(patch, newRows))
                 }
@@ -118,13 +118,11 @@ struct MatchListFeature {
                 .cancellable(id: CancelID.oddsUpdates, cancelInFlight: true)
                 
             case let ._throttleOddsUpdate(update):
-                return .send(._updateOdds(update))
-                        .throttle(
-                            id: ThrottleID.match(update.matchID),
-                            for: .seconds(1),
-                            scheduler: mainQueue,
-                            latest: true
-                        )
+                return .run { [update, clock] send in
+                    try? await clock.sleep(for: .seconds(1))
+                    await send(._updateOdds(update))
+                }
+                .cancellable(id: ThrottleID.match(update.matchID), cancelInFlight: true)
                 
             case let ._updateOdds(update):
                 if var row = state.rows[id: update.matchID] {

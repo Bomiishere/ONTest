@@ -41,7 +41,7 @@ struct MatchListDifferClient {
 }
 
 extension MatchListDifferClient: DependencyKey {
-    static var liveValue: MatchListDifferClient = {
+    static let liveValue: MatchListDifferClient = {
         let differ = MatchListDiffer()
         return .init(
             patch: { existing, new in
@@ -50,11 +50,11 @@ extension MatchListDifferClient: DependencyKey {
         )
     }()
 
-    static var previewValue: MatchListDifferClient = .init(
+    static let previewValue: MatchListDifferClient = .init(
         patch:  { _, new in MatchListPatch(removals: [], insertions: new.enumerated().map { ($0.offset, $0.element) }) }
     )
 
-    static var testValue: MatchListDifferClient = .init(
+    static let testValue: MatchListDifferClient = .init(
         patch:  { _, new in MatchListPatch(removals: [], insertions: new.enumerated().map { ($0.offset, $0.element) }) }
     )
 }
