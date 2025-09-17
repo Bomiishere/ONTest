@@ -26,6 +26,9 @@ struct MatchListView: View {
                     errorView(Text(err))
                 }
             }
+            .refreshable {
+                store.send(.reload)
+            }
             .navigationTitle("Matches & Odds")
             .task { await store.send(.task).finish() }
             .onDisappear { store.send(.onDisappear) }

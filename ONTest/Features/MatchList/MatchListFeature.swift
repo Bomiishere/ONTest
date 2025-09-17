@@ -39,6 +39,7 @@ struct MatchListFeature {
     
     enum Action: Equatable {
         case task
+        case reload
         
         // match list
         case _fetchMatchList
@@ -75,6 +76,13 @@ struct MatchListFeature {
                 return .run { send in
                     await send(._fetchMatchList)
                     await send(._startOddsStream)
+                }
+                
+            case .reload:
+                state.isLoading = true
+                state.errorMessage = nil
+                return .run { send in
+                    await send(._fetchMatchList)
                 }
                 
             case ._fetchMatchList:

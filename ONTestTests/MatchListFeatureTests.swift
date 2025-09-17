@@ -40,6 +40,22 @@ final class MatchListFeatureTests: XCTestCase {
         await store.finish()
     }
     
+    func testReload() async {
+        let store = TestStore(
+            initialState: MatchListFeature.State.init(),
+            reducer: { MatchListFeature()
+            })
+        
+        await store.send(.reload) { state in
+            state.isLoading = true
+            state.errorMessage = nil
+        }
+        await store.receive { action in
+            if case ._fetchMatchList = action { return true }
+            return false
+        }
+    }
+    
     func testFetchMatchList_rows() async {
         let exp_rows: [MatchListFeature.State.Row] = [
             .init(id: 1, teamA: "A", teamB: "D", time: "2025-07-06T12:00:00Z", teamAOdds: "1.90", teamBOdds: "2.04"),
