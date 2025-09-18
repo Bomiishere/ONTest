@@ -78,8 +78,13 @@ struct MatchListFeature {
             case .reload:
                 state.startLoading()
                 return .concatenate(
-                    .cancel(id: CancelID.matchListUpdates),
-                    .send(._fetchMatchList)
+                    .merge(
+                        .cancel(id: CancelID.matchListUpdates),
+                        .cancel(id: CancelID.oddsUpdates),
+                        .cancel(id: CancelID.applyPatch)
+                    ),
+                    .send(._fetchMatchList),
+                    .send(._startOddsStream)
                 )
                 
             case ._fetchMatchList:

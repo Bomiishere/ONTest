@@ -54,6 +54,13 @@ final class MatchListFeatureTests: XCTestCase {
             if case ._fetchMatchList = action { return true }
             return false
         }
+        await store.receive { action in
+            if case ._startOddsStream = action { return true }
+            return false
+        }
+        
+        await store.send(.onDisappear)
+        await store.finish()
     }
     
     func testFetchMatchList_rows() async {
