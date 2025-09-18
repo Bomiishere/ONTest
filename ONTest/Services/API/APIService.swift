@@ -8,46 +8,59 @@
 import ComposableArchitecture
 import Foundation
 
-actor APIService {
-    private let config: APIConfig
-    private let session: URLSession
+@globalActor
+enum APIService: GlobalActor {
     
-    init(config: APIConfig = .default, session: URLSession = URLSession(configuration: .default)) {
-        self.config = config
-        self.session = session
-    }
+    static let shared = APIServiceImpl()
     
-    func send(_ endpoint: APIEndPoint) async throws -> Data {
-        var request = try endpoint.asURLRequest(baseURL: config.baseURL)
+    actor APIServiceImpl {
+        private let config: APIConfig
+        private let session: URLSession
         
-        // headers
-        for (k, v) in config.defaultHeaders { request.setValue(v, forHTTPHeaderField: k) }
-        if let extraHeaders = endpoint.headers {
-            for (k, v) in extraHeaders { request.setValue(v, forHTTPHeaderField: k) }
+        init(config: APIConfig = .default, session: URLSession = URLSession(configuration: .default)) {
+            self.config = config
+            self.session = session
         }
         
-        // timeout
-        request.timeoutInterval = endpoint.timeout ?? config.timeout
-        
-        do {
-            let (data, resp) = try await session.data(for: request)
-            guard let http = resp as? HTTPURLResponse else { throw APIError.unknown }
-            guard (200..<300).contains(http.statusCode) else {
-                throw APIError.serverError(status: http.statusCode, data: data)
+        func request(_ endpoint: APIEndPoint) async throws -> Data {
+            var request = try endpoint.asURLRequest(baseURL: config.baseURL)
+            
+            // headers
+            for (k, v) in config.defaultHeaders { request.setValue(v, forHTTPHeaderField: k) }
+            if let extraHeaders = endpoint.headers {
+                for (k, v) in extraHeaders { request.setValue(v, forHTTPHeaderField: k) }
             }
-            return data
-        } catch let urlErr as URLError {
-            throw APIError.requestFailed(urlErr)
-        } catch {
-            throw error
+            
+            // timeout
+            request.timeoutInterval = endpoint.timeout ?? config.timeout
+            
+            do {
+                let (data, resp) = try await session.data(for: request)
+                guard let http = resp as? HTTPURLResponse else { throw APIError.unknown }
+                guard (200..<300).contains(http.statusCode) else {
+                    throw APIError.serverError(status: http.statusCode, data: data)
+                }
+                return data
+            } catch let urlErr as URLError {
+                throw APIError.requestFailed(urlErr)
+            } catch {
+                throw error
+            }
         }
     }
-    
-//    deinit { print("APIService deinit") }
 }
 
+// MARK: - APIService accessors
 extension APIService {
-    func fetch<T: Decodable>(_ endpoint: APIEndPoint, _ responseType: T.Type = T.self) async throws -> T {
+    static func request<T: Decodable & Sendable>(_ endpoint: APIEndPoint) async throws -> T {
+        try await APIService.shared.fetch(endpoint)
+    }
+}
+
+//MARK: - APIService request, decode, stubs
+private extension APIService.APIServiceImpl {
+    func fetch<T: Decodable & Sendable>(_ endpoint: APIEndPoint) async throws -> T {
+        // stubs
         switch endpoint {
         case .matches:
             let service = MockMatchService()
@@ -58,7 +71,9 @@ extension APIService {
         default:
             break
         }
-        let data = try await send(endpoint)
+        
+        // decode
+        let data = try await request(endpoint)
         let decoder = JSONDecoder()
         do {
             return try decoder.decode(T.self, from: data)

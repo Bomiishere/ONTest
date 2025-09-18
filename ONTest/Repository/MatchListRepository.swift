@@ -17,22 +17,20 @@ actor MatchListRepository {
     private var index = Set<Int>()
     
     // matches 約 100 筆
-    init(cacheCount: Int = 200) {
+    init(cacheCount: Int = 100) {
         cache.countLimit = cacheCount
     }
     
     //MARK: - API
+    @APIService
     func fetchAPI() async throws -> DataType {
-        let matchService = APIService()
-        async let matchesJob = matchService.fetch(APIEndPoint.matches, [Match].self)
         
-        let oddsService = APIService()
-        async let oddsListJob = oddsService.fetch(APIEndPoint.oddsList, [Odds].self)
-        
-        //並發
+        // 併發
+        async let matchesJob: [Match] = APIService.request(.matches)
+        async let oddsListJob: [Odds] = APIService.request(.oddsList)
         let (matches, oddsList) = try await (matchesJob, oddsListJob)
         
-        //prevent unique key crash
+        // prevent unique key crash
         let oddsMap = oddsList.reduce(into: [Int: Odds]()) { dict, odds in
             dict[odds.matchID] = odds
         }
@@ -57,12 +55,12 @@ actor MatchListRepository {
         return rows
     }
     
-    // MARK: - Read
+    // MARK: - Read Cache
     func snapshot() -> DataType {
         return cache.object(forKey: cacheKey)?.data ?? []
     }
     
-    // MARK: - Write
+    // MARK: - Write Cache
     private func seed(_ data: DataType) async {
         cache.setObject(MatchListBox(data), forKey: cacheKey)
     }
