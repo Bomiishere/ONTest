@@ -182,7 +182,7 @@ final class MatchListFeatureTests: XCTestCase {
         XCTAssertEqual(remaining, 0, "Budget should be fully consumed")
     }
     
-    func testApplyContentUpdates_result_buget_bounds() throws {
+    func testApplyRowContentUpdates_result_buget_bounds() throws {
         var state = MatchListFeature.State()
         state.rows = .init(uniqueElements: (0..<3).map { id in
             MatchListFeature.State.Row(id: id, teamA: "A\(id)", teamB: "B\(id)", time: "2025-01-01T00:00:00Z", teamAOdds: "1.90", teamBOdds: "2.10")
@@ -194,7 +194,7 @@ final class MatchListFeatureTests: XCTestCase {
             MatchListFeature.State.Row(id: 4, teamA: "", teamB: "", time: "", teamAOdds: "4", teamBOdds: ""),
         ])
         
-        let remaining = state.applyContentUpdates(toward: updates, opsLeft: 2)
+        let remaining = state.applyRowContentUpdates(toward: updates, opsLeft: 2)
         
         // Only id 2 will update
         XCTAssertEqual(state.rows[id: 2]?.teamAOdds, "2")

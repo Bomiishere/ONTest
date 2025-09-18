@@ -13,7 +13,7 @@ import Dependencies
 struct MatchListFeature {
     
     enum CancelID {
-        case oddsUpdates, matchListUpdates
+        case matchListUpdates, oddsUpdates, applyPatch
     }
     
     enum ThrottleID: Hashable {
@@ -46,12 +46,12 @@ struct MatchListFeature {
         case _apply(_ newRows: IdentifiedArrayOf<State.Row>)
         case _applyDonePatch(_ patch: MatchListPatch, _ newRows: IdentifiedArrayOf<State.Row>)
         
-        //odds stream
+        // odds stream
         case _startOddsStream
         case _throttleOddsUpdate(OddsUpdate)
         case _updateOdds(OddsUpdate)
         
-        //fail
+        // fail
         case _failed(String)
         
         case onDisappear
@@ -66,24 +66,21 @@ struct MatchListFeature {
     
     // MARK: Reducer
     var body: some ReducerOf<Self> {
-        Reduce {
-            state,
-            action in
+        Reduce { state, action in
             switch action {
             case .task:
-                state.isLoading = true
-                state.errorMessage = nil
-                return .run { send in
-                    await send(._fetchMatchList)
-                    await send(._startOddsStream)
-                }
+                state.startLoading()
+                return .merge(
+                    .send(._fetchMatchList),
+                    .send(._startOddsStream)
+                )
                 
             case .reload:
-                state.isLoading = true
-                state.errorMessage = nil
-                return .run { send in
-                    await send(._fetchMatchList)
-                }
+                state.startLoading()
+                return .concatenate(
+                    .cancel(id: CancelID.matchListUpdates),
+                    .send(._fetchMatchList)
+                )
                 
             case ._fetchMatchList:
                 return .run { [matchListFetchUpdates] send in
@@ -105,11 +102,11 @@ struct MatchListFeature {
                     let patch = await differPatch(Array(existing), Array(newRows))
                     await send(._applyDonePatch(patch, newRows))
                 }
-                .cancellable(id: CancelID.matchListUpdates, cancelInFlight: true)
+                .cancellable(id: CancelID.applyPatch, cancelInFlight: true)
                 
             case let ._applyDonePatch(patch, newRows):
                 let done = state.applyPatch(patch, toward: newRows)
-                state.isLoading = false
+                state.stopLoading()
                 return done ? .none : .send(._apply(newRows))
                 
             case ._startOddsStream:
@@ -126,10 +123,10 @@ struct MatchListFeature {
                 .cancellable(id: CancelID.oddsUpdates, cancelInFlight: true)
                 
             case let ._throttleOddsUpdate(update):
-                return .run { [update, clock] send in
-                    try? await clock.sleep(for: .seconds(1))
-                    await send(._updateOdds(update))
-                }
+                return .concatenate(
+                    .run { send in try? await clock.sleep(for: .seconds(1))},
+                    .send(._updateOdds(update))
+                )
                 .cancellable(id: ThrottleID.match(update.matchID), cancelInFlight: true)
                 
             case let ._updateOdds(update):
@@ -141,20 +138,21 @@ struct MatchListFeature {
                 return .none
                 
             case let ._failed(message):
-                state.isLoading = false
-                state.errorMessage = message
+                state.stopLoading(message: message)
                 return .none
                 
             case .onDisappear:
                 return .merge(
                     .cancel(id: CancelID.matchListUpdates),
-                    .cancel(id: CancelID.oddsUpdates)
+                    .cancel(id: CancelID.oddsUpdates),
+                    .cancel(id: CancelID.applyPatch)
                 )
             }
         }
     }
 }
 
+// MARK: Patch
 extension MatchListFeature.State {
     
     mutating func applyPatch(
@@ -165,7 +163,7 @@ extension MatchListFeature.State {
         var operationsLeft = maximumOperations
         operationsLeft = applyDeletions(patch.removals, opsLeft: operationsLeft)
         operationsLeft = applyInsertions(patch.insertions, opsLeft: operationsLeft)
-        _ = applyContentUpdates(toward: target, opsLeft: operationsLeft)
+        _ = applyRowContentUpdates(toward: target, opsLeft: operationsLeft)
         return rows == target
     }
     
@@ -201,9 +199,11 @@ extension MatchListFeature.State {
         return budget
     }
     
-    mutating func applyContentUpdates(toward target: IdentifiedArrayOf<Row>, opsLeft: Int) -> Int {
+    mutating func applyRowContentUpdates(toward target: IdentifiedArrayOf<Row>, opsLeft: Int) -> Int {
         guard opsLeft > 0 else { return 0 }
         var budget = opsLeft
+        
+        // only update exist match & row content
         for t in target {
             if let i = rows.index(id: t.id), rows[i] != t {
                 rows[i] = t
@@ -212,5 +212,18 @@ extension MatchListFeature.State {
             }
         }
         return budget
+    }
+}
+
+// MARK: State Change
+private extension MatchListFeature.State {
+    mutating func startLoading() {
+        if !isLoading { isLoading = true }
+        errorMessage = nil
+    }
+    
+    mutating func stopLoading(message: String? = nil) {
+        if isLoading { isLoading = false }
+        errorMessage = message
     }
 }
